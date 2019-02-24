@@ -1,0 +1,257 @@
+#!/bin/bash
+#
+#
+#	OnlineFailoverIP OCF RA. Does nothing but wait a few seconds, can be
+#	configured to fail occassionally.
+#
+# Copyright (c) 2004 SUSE LINUX AG, Lars Marowsky-Bree
+#                    All Rights Reserved.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of version 2 of the GNU General Public License as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it would be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+#
+# Further, this software is distributed without any warranty that it is
+# free of the rightful claim of any third person regarding infringement
+# or the like.  Any license provided herein, whether implied or
+# otherwise, applies only to this software file.  Patent licenses, if
+# any, provided herein do not apply to combinations of this program with
+# other software, or any other product whatsoever.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write the Free Software Foundation,
+# Inc., 59 Temple Place - Suite 330, Boston MA 02111-1307, USA.
+#
+
+#######################################################################
+# Initialization:
+
+: ${OCF_FUNCTIONS_DIR=${OCF_ROOT}/lib/heartbeat}
+. ${OCF_FUNCTIONS_DIR}/ocf-shellfuncs
+
+# Defaults
+DEFAULT_CONF_FILE="/etc/onlineFailoverIP/localparameters.conf"
+if [ -r "${DEFAULT_CONF_FILE}" ]
+then
+	. "${DEFAULT_CONF_FILE}"
+fi
+
+if [ "X${SCRIPT}" != "X" ]
+then
+	OCF_RESKEY_script="${SCRIPT}"
+else
+	OCF_RESKEY_script="/usr/local/bin/OnlineFailoverIP"
+fi
+
+if [ "X${ONLINE_API_NUM}" != "X" ]
+then
+	OCF_RESKEY_api_num="${ONLINE_API_NUM}"
+else
+	OCF_RESKEY_api_num=""
+fi
+
+if [ "X${LOCAL_IP}" != "X" ]
+then
+	OCF_RESKEY_public_ip="${LOCAL_IP}"
+else
+	OCF_RESKEY_public_ip=""
+fi
+
+if [ "X${FAILOVER_IP}" != "X" ]
+then
+	OCF_RESKEY_failover_ip="${FAILOVER_IP}"
+else
+	OCF_RESKEY_failover_ip=""
+fi
+
+
+#ocf_log err "Script : '${OCF_RESKEY_script}'"
+#ocf_log err "API KEY : '`expr substr ${OCF_RESKEY_api_num} 1 4`…CENSORED…${OCF_RESKEY_api_num:(-4)}'"
+#ocf_log err "Failover IP : '${OCF_RESKEY_failover_ip}'"
+#ocf_log err "Destination IP : '${OCF_RESKEY_public_ip}'"
+
+#######################################################################
+
+meta_data() {
+	cat <<END
+<?xml version="1.0"?>
+<!DOCTYPE resource-agent SYSTEM "ra-api-1.dtd">
+<resource-agent name="OnlineFailoverIP">
+<version>1.0</version>
+
+<longdesc lang="en">
+Online.net REST API client for failover IP change.
+
+NB: Please pay attention to the timeouts specified in the actions
+section below. They should be meaningful for the kind of resource
+the agent manages. They should be the minimum advised timeouts,
+but they shouldn't/cannot cover _all_ possible resource
+instances. So, try to be neither overly generous nor too stingy,
+but moderate. The minimum timeouts should never be below 10 seconds.
+</longdesc>
+<shortdesc lang="en">Online.net REST API client for failover IP change.</shortdesc>
+
+<parameters>
+
+<parameter name="api_num" unique="0">
+<longdesc lang="en">
+Online.net API number to authorize the call
+</longdesc>
+<shortdesc lang="en">API number</shortdesc>
+<content type="string" default="${OCF_RESKEY_api_num_default}" />
+</parameter>
+
+<parameter name="public_ip" unique="0">
+<longdesc lang="en">
+Local server public IP address (not failover IP!)
+</longdesc>
+<shortdesc lang="en">Local server public IP address</shortdesc>
+<content type="string" default="${OCF_RESKEY_public_ip_default}" />
+</parameter>
+
+<parameter name="failover_ip" unique="0">
+<longdesc lang="en">
+Failover IP address
+</longdesc>
+<shortdesc lang="en">Failover IP address</shortdesc>
+<content type="string" default="${OCF_RESKEY_failover_ip_default}" />
+</parameter>
+
+</parameters>
+
+<actions>
+<action name="start"		timeout="20" />
+<action name="stop"		timeout="20" />
+<action name="monitor"		timeout="20" interval="60" depth="0" />
+<action name="reload"		timeout="20" />
+<action name="migrate_to"	timeout="20" />
+<action name="migrate_from"	timeout="20" />
+<action name="meta-data"	timeout="5" />
+<action name="validate-all"	timeout="20" />
+</actions>
+</resource-agent>
+END
+}
+
+#######################################################################
+
+onlinefailoverip_usage() {
+	cat <<END
+usage: $0 {start|stop|monitor|migrate_to|migrate_from|validate-all|meta-data}
+
+Expects to have a fully populated OCF RA-compliant environment set.
+END
+}
+
+onlinefailoverip_start() {
+	onlinefailoverip_monitor
+	ocf_log info "LIBRIT - (onlinefailoverip_start) - START - COMMAND RUN : /usr/local/bin/OnlineFailoverIP --action start --apitoken ${OCF_RESKEY_api_num} --failoverip ${OCF_RESKEY_failover_ip} --destinationip ${OCF_RESKEY_public_ip}"
+	STATUS_ANSWER=`/usr/local/bin/OnlineFailoverIP --action start --apitoken ${OCF_RESKEY_api_num} --failoverip ${OCF_RESKEY_failover_ip} --destinationip ${OCF_RESKEY_public_ip}; sleep 1`
+	if [ $? =  $OCF_SUCCESS ]; then
+		ocf_log info "LIBRIT - START - $STATUS_ANSWER"
+		return $OCF_SUCCESS
+	else
+		ocf_log info "LIBRIT - STARTERROR - $STATUS_ANSWER"
+		return $OCF_ERR_GENERIC
+	fi
+}
+
+onlinefailoverip_stop() {
+	onlinefailoverip_monitor
+	ocf_log info "LIBRIT - (onlinefailoverip_stop) - MONITOR - COMMAND RUN : /usr/local/bin/OnlineFailoverIP --action status --apitoken ${OCF_RESKEY_api_num} --failoverip ${OCF_RESKEY_failover_ip} --destinationip ${OCF_RESKEY_public_ip}"
+	return $OCF_SUCCESS
+}
+
+onlinefailoverip_monitor() {
+	local rc
+	ocf_log info "LIBRIT - (onlinefailoverip_monitor) - MONITOR - COMMAND RUN : /usr/local/bin/OnlineFailoverIP --action status --apitoken ${OCF_RESKEY_api_num} --failoverip ${OCF_RESKEY_failover_ip} --destinationip ${OCF_RESKEY_public_ip}"
+	STATUS_ANSWER=`sleep 1; /usr/local/bin/OnlineFailoverIP --action status --apitoken ${OCF_RESKEY_api_num} --failoverip ${OCF_RESKEY_failover_ip} --destinationip ${OCF_RESKEY_public_ip}`
+	case "$?" in
+		0)
+			rc=$OCF_SUCCESS
+			ocf_log info "Resource is running"
+			;;
+		1)
+			rc=$OCF_NOT_RUNNING
+			ocf_log info "Resource is not running"
+			;;
+		*)
+			ocf_log info "Resource has failed"
+			ocf_log err "Resource has failed"
+			exit $OCF_ERR_GENERIC
+	esac
+	return $rc
+}
+
+onlinefailoverip_validate() {
+        ocf_log err "LIBRIT - VALIDATE - Script : '${OCF_RESKEY_script}'"
+	ocf_log err "LIBRIT - VALIDATE - API KEY : '`expr substr ${OCF_RESKEY_api_num} 1 4`…CENSORED…${OCF_RESKEY_api_num:(-4)}'"
+        ocf_log err "LIBRIT - VALIDATE - Failover IP : '${OCF_RESKEY_failover_ip}'"
+        ocf_log err "LIBRIT - VALIDATE - Destination IP : '${OCF_RESKEY_public_ip}'"
+
+	if [ ! -x "${OCF_RESKEY_script}" ]
+	then
+		ocf_log err "Script '${OCF_RESKEY_script}' does not exist or is not executable."
+		return $OCF_ERR_INSTALLED
+	fi
+	
+	if [ -z "${OCF_RESKEY_api_num}" ]
+	then
+		ocf_log err "API Key is not defined."
+		return $OCF_ERR_CONFIGURED
+	fi
+
+	if [ -z "${OCF_RESKEY_failover_ip}" ]
+	then
+		ocf_log err "Failover IP is not defined."
+		return $OCF_ERR_CONFIGURED
+	elif [ -z `echo "${OCF_RESKEY_failover_ip}" | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b"` ]
+	then
+		ocf_log err "'${OCF_RESKEY_failover_ip}' is NOT a valid IP."
+		return $OCF_ERR_CONFIGURED
+	fi
+	if [ -z "${OCF_RESKEY_public_ip}" ]
+	then
+		ocf_log err "Local host public IP is not defined."
+		return $OCF_ERR_CONFIGURED
+	elif [ -z `echo "${OCF_RESKEY_public_ip}" | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b"` ]
+	then
+		ocf_log err "'${OCF_RESKEY_public_ip}' is NOT a valid IP."
+		return $OCF_ERR_CONFIGURED
+	fi
+
+	return $OCF_SUCCESS
+}
+
+: ${OCF_RESKEY_state=${HA_RSCTMP}/OnlineFailoverIP-${OCF_RESOURCE_INSTANCE}.state}
+
+case $__OCF_ACTION in
+	meta-data)	meta_data
+			exit $OCF_SUCCESS
+		;;
+	start)		onlinefailoverip_start;;
+	stop)		onlinefailoverip_stop;;
+	monitor)	onlinefailoverip_monitor;;
+	migrate_to)	ocf_log info "Migrating ${OCF_RESOURCE_INSTANCE} to ${OCF_RESKEY_CRM_meta_migrate_target}."
+		;;
+	migrate_from)	ocf_log info "Migrating ${OCF_RESOURCE_INSTANCE} from ${OCF_RESKEY_CRM_meta_migrate_source}."
+			onlinefailoverip_start
+		;;
+	reload)		ocf_log info "Reloading ${OCF_RESOURCE_INSTANCE} ..."
+		;;
+	validate-all)	onlinefailoverip_validate;;
+	usage|help)	onlinefailoverip_usage
+			exit $OCF_SUCCESS
+		;;
+	*)		onlinefailoverip_usage
+			exit $OCF_ERR_UNIMPLEMENTED
+		;;
+esac
+rc=$?
+ocf_log debug "${OCF_RESOURCE_INSTANCE} $__OCF_ACTION : $rc"
+exit $rci
+
